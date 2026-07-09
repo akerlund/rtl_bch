@@ -15,8 +15,7 @@ Use the same first profile as the VIP:
 | `PRIMITIVE_POLYNOMIAL` | `0b100101` | Field polynomial `x^5 + x^2 + 1`. |
 | `N_BASE` | `31` | Natural primitive BCH codeword length, `2^M - 1`. |
 | `K_BASE` | `21` | Natural message capacity before byte-aligned payload restriction. |
-| `PAYLOAD_BYTES` | `2` | User-visible payload size accepted by the RTL interface. |
-| `PAYLOAD_BITS` | `16` | User-visible payload width, `8 * PAYLOAD_BYTES`. |
+| `PAYLOAD_BITS` | `16` | User-visible payload width for this profile. Always a multiple of `8` so the VIP and cocotb tests can derive a byte count (`payload_bytes = PAYLOAD_BITS / 8`); `CFG_P` itself only stores the bit width. |
 | `PAD_BITS` | `5` | Internal zero pad bits used to fill `K_BASE`. |
 | `PARITY_BITS` | `10` | Check bits for BCH(31, 21, T=2). |
 | `CODEWORD_BITS` | `31` | Initial transmitted codeword width. |
@@ -25,6 +24,36 @@ Use the same first profile as the VIP:
 Start with full-length BCH(31, 21, t=2) codewords and deterministic zero pad
 bits. Shortened codewords can be added later after the encoder and decoder are
 verified in the full-length form.
+
+`PAD_BITS` are real bits, not an accounting artifact: they are set to zero,
+folded into the internal message exactly like the payload bits, and divided
+into the generator polynomial along with everything else, so they occupy real
+positions in the transmitted `CODEWORD_BITS`-wide codeword
+(`codeword[30:26]` for the default profile) on every single transaction. They
+are "added to the data" in the literal sense:
+`internal_msg = {PAD_BITS zero bits, payload}` before the encoder ever runs.
+
+They exist because BCH(31, 21, T=2) naturally carries `K_BASE=21` message
+bits, but `21` is not a multiple of `8`, and this project intentionally keeps
+the user-facing payload byte-granular for usability. That decision means only
+a byte-aligned subset of the code's native capacity is ever usable, and the
+remaining `K_BASE - PAYLOAD_BITS` bits are always zero, every codeword,
+forever: pure loss relative to what the code could carry. For the default
+profile that is `21 - 16 = 5` bits, about `23.8%` of native capacity. For
+`BCH127_8BYTE_T2_CFG_C` (a second, independent base code used to exercise
+width parameterization and `GF(2^M)` generality for `M != 5`, see
+Parameterized DUT Builds) it is `113 - 64 = 49` bits, about `43.4%` of native
+capacity thrown away — still a real efficiency loss, and that profile is
+documented as a build-structure test rather than a second product
+deliverable.
+
+This loss is deliberately accepted for the first, correctness-focused
+profile. If capacity efficiency matters later, the options are: pick a
+different base BCH `(N_BASE, K_BASE, T)` whose `K_BASE` already lands on a
+byte boundary, or add a shortened-codeword mode (see Open Decisions) that
+trims specific bit positions instead of always padding the same fixed
+positions with zero. Both are out of scope until the full 31-bit encoder and
+decoder are verified.
 
 Initial fixed-profile constants to generate from the VIP and store in
 `CFG_P`:
@@ -35,7 +64,11 @@ Initial fixed-profile constants to generate from the VIP and store in
 | `GF_REDUCTION_POLY` | `5'b00101` | Low reduction taps for `x^5 + x^2 + 1`. |
 | `GENERATOR_POLY_FULL` | `11'h769` | `g(x) = x^10 + x^9 + x^8 + x^6 + x^5 + x^3 + 1`; bit `i` is coefficient `x^i`. |
 | `GENERATOR_LFSR_TAPS` | `10'h369` | Lower 10 coefficients of `g(x)` when the leading term is implicit. |
-| `INDEPENDENT_SYNDROMES` | `S1`, `S3` | For binary `t=2`, even syndromes are derived by squaring. |
+
+`S1` and `S3` are the only syndromes computed directly; they are not a
+`CFG_P` field. For binary codes with `T=2`, even syndromes are redundant
+(`S2 = S1^2`, `S4 = S2^2` by the Frobenius/squaring property of `GF(2^m)`), so
+the direct-solve decoder only needs the two odd syndromes.
 
 The generator constants must be produced by `vip_bch`, checked into the test
 vectors, and statically checked by RTL simulation before relying on any encoded
@@ -62,7 +95,7 @@ deterministic way.
 All RTL modules shall take one BCH configuration parameter:
 
 ```systemverilog
-parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG
+parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG_C
 ```
 
 Do not add separate scalar parameters such as `M`, `T`, `PAYLOAD_BITS`, or
@@ -71,7 +104,21 @@ module when they make expressions easier to read, but the source of truth is
 always `CFG_P`.
 
 `bch_pkg.sv` owns the packed config struct. Struct field names and assignment
-pattern labels are capitalized:
+pattern labels are capitalized. Profile constants are declared `localparam`,
+not `parameter`: SystemVerilog packages have no external override mechanism
+for package-scope parameters, so `localparam` states that intent directly
+instead of implying an overridable knob that does not exist. Only the
+per-module `CFG_P` below is a real, overridable `parameter`.
+
+Profile constant names follow `BCH<N_BASE>_<PAYLOAD_BYTES>BYTE_T<T>_CFG_C`:
+`BCH<N_BASE>` records the base BCH code length (`2^M - 1`), the byte count
+records the payload split for humans (it is not itself a `CFG_P` field, see
+below), and `T2` records `T = 2`. `BCH31_2BYTE_T2_CFG_C` is the default
+profile, base BCH(31, 21, T=2) over `GF(2^5)`. `BCH127_8BYTE_T2_CFG_C` is a
+second, independent base code, BCH(127, 113, T=2) over `GF(2^7)`; unlike a
+same-code width variant, it changes `M`, `N_BASE`, `K_BASE`,
+`PRIMITIVE_POLYNOMIAL`, and the generator polynomial, so it exercises
+`GF(2^M)` generality for `M != 5` in addition to width parameterization.
 
 ```systemverilog
 package bch_pkg;
@@ -81,7 +128,6 @@ package bch_pkg;
     logic [31:0] PRIMITIVE_POLYNOMIAL;
     int unsigned N_BASE;
     int unsigned K_BASE;
-    int unsigned PAYLOAD_BYTES;
     int unsigned PAYLOAD_BITS;
     int unsigned PAD_BITS;
     int unsigned PARITY_BITS;
@@ -93,27 +139,62 @@ package bch_pkg;
     logic [31:0] GENERATOR_LFSR_TAPS;
   } bch_cfg_t;
 
-  parameter bch_cfg_t BCH31_2BYTE_T2_CFG = '{
-    M: 5,
-    T: 2,
-    PRIMITIVE_POLYNOMIAL: 32'b100101,
-    N_BASE: 31,
-    K_BASE: 21,
-    PAYLOAD_BYTES: 2,
-    PAYLOAD_BITS: 16,
-    PAD_BITS: 5,
-    PARITY_BITS: 10,
-    CODEWORD_BITS: 31,
-    ID_BITS: 8,
+  localparam bch_cfg_t BCH31_2BYTE_T2_CFG_C = '{
+    M                     : 5,
+    T                     : 2,
+    PRIMITIVE_POLYNOMIAL  : 32'b100101,
+    N_BASE                : 31,
+    K_BASE                : 21,
+    PAYLOAD_BITS          : 16,
+    PAD_BITS              : 5,
+    PARITY_BITS           : 10,
+    CODEWORD_BITS         : 31,
+    ID_BITS               : 8,
     GF_PRIMITIVE_POLY_FULL: 32'b100101,
-    GF_REDUCTION_POLY: 32'b00101,
-    GENERATOR_POLY_FULL: 32'h769,
-    GENERATOR_LFSR_TAPS: 32'h369
+    GF_REDUCTION_POLY     : 32'b00101,
+    GENERATOR_POLY_FULL   : 32'h769,
+    GENERATOR_LFSR_TAPS   : 32'h369
+  };
+
+  // Second profile: an independent base code, BCH(127,113,T=2) over
+  // GF(2^7) with primitive polynomial x^7+x^3+1. It does not share GF math
+  // or a generator polynomial with the default profile. It exists to
+  // exercise CFG_P-driven width parameterization (ports, part-selects,
+  // loop bounds) *and* GF(2^M) generality for M != 5 against a second
+  // concrete value, not as a second product deliverable. ID_BITS is
+  // deliberately left unchanged: it is a pass-through sideband, not BCH
+  // math, and vip_axi4s_agent can drive an incrementing ID at any width, so
+  // varying it here would not exercise anything meaningful. See
+  // "Parameterized DUT Builds". Generator polynomial derivation: minimal
+  // polynomial of alpha^1 (== the primitive polynomial itself, degree 7)
+  // times minimal polynomial of alpha^3 (degree 7), giving a degree-14
+  // g(x); verified by exhaustive encode/decode simulation, not hand algebra.
+  localparam bch_cfg_t BCH127_8BYTE_T2_CFG_C = '{
+    M                     : 7,
+    T                     : 2,
+    PRIMITIVE_POLYNOMIAL  : 32'b10001001,
+    N_BASE                : 127,
+    K_BASE                : 113,
+    PAYLOAD_BITS          : 64,
+    PAD_BITS              : 49,
+    PARITY_BITS           : 14,
+    CODEWORD_BITS         : 127,
+    ID_BITS               : 8,
+    GF_PRIMITIVE_POLY_FULL: 32'b10001001,
+    GF_REDUCTION_POLY     : 32'b0001001,
+    GENERATOR_POLY_FULL   : 32'h4377,
+    GENERATOR_LFSR_TAPS   : 32'h377
   };
 endpackage
 ```
 
-Every profile-dependent RTL width, loop bound, assertion, and testbench adapter
+`PAYLOAD_BYTES` is intentionally not a `CFG_P` field: for the byte-granular
+profiles in this plan it is always `PAYLOAD_BITS / 8`, so keeping only
+`PAYLOAD_BITS` avoids a second source of truth. The Python VIP and cocotb
+tests derive `payload_bytes = PAYLOAD_BITS // 8` wherever a byte count is
+convenient (for example sizing `Axi4sCfgT.TDATA_BYTES_P`).
+
+Every profile-dependent RTL width, loop bound, assertion, and testbench wrapper
 must reference `CFG_P.<CAPITALIZED_FIELD>`.
 
 ## Notes From `bch_verilog`
@@ -138,7 +219,7 @@ Useful details to carry forward:
   We can reuse that structure, but our one-shot valid/ready block should expose
   a single 31-bit codeword with an explicit payload/pad/parity layout.
 - The old docs warn that encoder and syndrome padding conventions can diverge
-  for non-word-aligned data. Our byte-granular API and cocotb adapters must make
+  for non-word-aligned data. Our byte-granular API and TB VIF bridges must make
   padding explicit at the boundary and forbid hidden bit shifts inside the BCH
   math.
 - For `t=2`, the old `bch_error_dec` avoids a full Berlekamp-Massey solver. It
@@ -174,21 +255,42 @@ rtl/
     bch_encoder.sv
     bch_syndrome.sv
     bch_decoder.sv
-    bch_axis_encoder.sv
-    bch_axis_decoder.sv
     bch_top.sv
     bch_rtl.core
   tb/
+    top/
+      bch_encoder_top__bch31_2byte_t2.sv
+      bch_encoder_top__bch127_8byte_t2.sv
+      bch_syndrome_top__bch31_2byte_t2.sv
+      bch_syndrome_top__bch127_8byte_t2.sv
+      bch_decoder_top__bch31_2byte_t2.sv
+      bch_decoder_top__bch127_8byte_t2.sv
+      bch_top_top__bch31_2byte_t2.sv
     cocotb/
-      test_bch_encoder.py
-      test_bch_syndrome.py
-      test_bch_decoder.py
-      test_bch_top.py
+      conftest.py
+      bch_clk_rst.py
+      tc/
+        test_bch_encoder.py
+        test_bch_syndrome.py
+        test_bch_decoder.py
+        test_bch_top.py
     bch_cocotb.core
 ```
 
+The submodule VIP `.core` files use CAPI2 VLNV names such as
+`akerlund::vip_axi4s_agent:0`. Give the new `.core` files an explicit VLNV
+name in the same style (for example `rtl_bch::bch_rtl:0` and
+`rtl_bch::bch_cocotb:0`) rather than relying on FuseSoC's filename-derived
+default, so dependents can reference a stable name.
+
+Create `bch_rtl.core`/`bch_cocotb.core` and the `tb/top/` stub wrapper files
+(connectivity only, no BCH datapath) as one of the first RTL tasks, before any
+block's datapath is implemented, so port names, VIF wiring, and the two-profile
+build structure can be reviewed early (see Milestones and `TODO.md`).
+
 `bch_pkg.sv`
-: Owns `bch_cfg_t`, the default `BCH31_2BYTE_T2_CFG`, bit-order helpers, and
+: Owns `bch_cfg_t`, the default `BCH31_2BYTE_T2_CFG_C`, the second
+  `BCH127_8BYTE_T2_CFG_C` profile, bit-order helpers, and
   static assertions for the fixed first profile.
 
 `bch_gf.sv`
@@ -207,11 +309,6 @@ rtl/
 : Decoder for received `CFG_P.CODEWORD_BITS`. Output is corrected payload,
   optional corrected codeword, error count, error locations if practical, and
   `uncorrectable`.
-
-`bch_axis_encoder.sv`, `bch_axis_decoder.sv`
-: AXI4-Stream-facing wrappers used by cocotb tests and later integration. They
-  adapt stream payloads/codewords to the simple core valid/ready interfaces.
-  The core math blocks remain protocol-light.
 
 `bch_top.sv`
 : Optional integration wrapper after the encoder and decoder pass block-level
@@ -246,9 +343,13 @@ configuration.
 
 ## Interface Plan
 
-Start with simple transaction-level valid/ready interfaces, not AXI4-Stream.
-AXI4-Stream wrappers are used for cocotb driving and integration, but they
-adapt to these core interfaces rather than moving BCH math into the wrapper.
+Every public block exposes only the plain transaction-level valid/ready
+`ing_`/`egr_` interface; there is no separate AXI4-Stream wrapper module. The
+cocotb TB tops instantiate `vip_axi4s_if` interfaces directly and wire those
+VIFs to the core `ing_`/`egr_` ports for driving and monitoring, because the
+`ing_`/`egr_` handshake is already structurally the same single-beat
+valid/ready protocol AXI4-Stream uses (see Verification Architecture). Do not
+add `bch_axis_encoder.sv`/`bch_axis_decoder.sv` protocol-adapter modules.
 All interface vector widths are derived directly from `CFG_P.<FIELD>`; the
 interface must not introduce separate width parameters.
 
@@ -256,7 +357,7 @@ Encoder interface:
 
 ```systemverilog
 module bch_encoder #(
-  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG
+  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG_C
 ) (
   input  logic                          clk,
   input  logic                          rst_n,
@@ -275,7 +376,7 @@ Decoder interface:
 
 ```systemverilog
 module bch_decoder #(
-  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG
+  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG_C
 ) (
   input  logic                           clk,
   input  logic                           rst_n,
@@ -321,11 +422,10 @@ must still tolerate backpressure at input and output.
 
 First-pass byte and bit ordering:
 
-- `vip_bch.encode_bytes(payload)` uses `int.from_bytes(payload, "big")`.
-- For the initial 2-byte payload, `payload[0]` maps to `ing_payload[15:8]`.
-- For the initial 2-byte payload, `payload[1]` maps to `ing_payload[7:0]`.
-- More generally, byte `i` maps to
-  `ing_payload[CFG_P.PAYLOAD_BITS-1-(8*i) -: 8]`.
+- `vip_bch.encode_bytes(payload)` uses `int.from_bytes(payload, "little")`.
+- For the initial 2-byte payload, `payload[0]` maps to `ing_payload[7:0]`.
+- For the initial 2-byte payload, `payload[1]` maps to `ing_payload[15:8]`.
+- More generally, byte `i` maps to `ing_payload[8*i +: 8]`.
 - `codeword[0]` corresponds to BCH polynomial coefficient `x^0`.
 - Error position `0` in the VIP flips `codeword[0]`.
 - Any serial transport wrapper must convert serial order at the wrapper
@@ -337,7 +437,7 @@ Tests shall include asymmetric payloads such as `16'h00ff`, `16'hff00`,
 First-pass systematic layout:
 
 ```systemverilog
-internal_msg = {CFG_P.PAD_BITS{1'b0}, ing_payload};  // 21 bits
+internal_msg = {{CFG_P.PAD_BITS{1'b0}}, ing_payload};  // 21 bits
 egr_codeword = {internal_msg, parity_bits};          // 31 bits
 ```
 
@@ -346,6 +446,12 @@ That means `egr_codeword[9:0]` contains parity,
 `egr_codeword[30:26]` contains the five deterministic zero pad bits.
 If the VIP chooses a different systematic packing, update this section before
 writing RTL; do not compensate with undocumented reversals in tests.
+
+The concatenation above is the default-profile layout, not permission to write
+fragile zero-width RTL later. The first two planned profiles have `PAD_BITS > 0`.
+If a future profile has `PAD_BITS == 0`, implement the pad insertion and pad
+check with a helper or generate branch so no zero-width replication or
+part-select reaches the simulator or synthesizer.
 
 ## RTL Microarchitecture Specification
 
@@ -371,20 +477,38 @@ For one-cycle registered blocks such as the first encoder and syndrome:
 assign ing_ready = !egr_valid || egr_ready;
 ```
 
-For the multi-cycle decoder:
+Pipelining default: unless documented otherwise, a block shall accept a new
+input every cycle whenever it has room for the resulting output, so
+throughput is limited only by egress backpressure, not by internal
+processing latency. `bch_encoder.sv` and `bch_syndrome.sv` already meet this:
+their one-cycle datapath plus the one-entry output register above let them
+accept a new transaction every cycle unless `egr_valid && !egr_ready`.
+
+`bch_decoder.sv` is the deliberate exception for the first implementation. Its
+serial Chien search reuses one set of `s1_q`/`s3_q`/`sigma1_q`/`sigma2_q`/
+`search_idx_q`/`error_mask_q` registers for the whole multi-cycle decode, so a
+second transaction cannot be admitted until that state is free. Making the
+decoder fully pipelined would need either replicated per-transaction search
+state (one register set per in-flight decode) or a parallel/combinational
+Chien search that finishes in a small bounded number of cycles instead of one
+position per cycle. Both are legitimate later upgrades (see Open Decisions),
+but are out of scope for the first correctness-focused implementation, so the
+first-pass decoder intentionally accepts only one transaction at a time:
 
 ```systemverilog
 assign ing_ready = state_q == ST_IDLE;
 ```
 
 The decoder does not accept a second input until the current output has been
-accepted. That keeps transaction ordering trivial for bringup.
+accepted. That keeps transaction ordering trivial for bringup, at the cost of
+throughput: worst case is roughly one decode per `CFG_P.CODEWORD_BITS + 4`
+cycles.
 
 ### `bch_pkg.sv`
 
 Responsibilities:
 
-- Define `bch_cfg_t` and `BCH31_2BYTE_T2_CFG`.
+- Define `bch_cfg_t`, `BCH31_2BYTE_T2_CFG_C`, and `BCH127_8BYTE_T2_CFG_C`.
 - Define derived local helper functions that do not become public scalar
   parameters.
 - Provide named field extract helpers only when they reduce repeated bit
@@ -462,8 +586,12 @@ division.
 Datapath:
 
 1. On accept, form the internal message:
-   `{CFG_P.PAD_BITS{1'b0}, ing_payload}`.
-2. Form `dividend = internal_msg << CFG_P.PARITY_BITS`.
+   `{{CFG_P.PAD_BITS{1'b0}}, ing_payload}`.
+2. Zero-extend the internal message to `CFG_P.CODEWORD_BITS` bits, then form
+   `dividend = internal_msg << CFG_P.PARITY_BITS`. The internal message is
+   `CFG_P.K_BASE` bits wide; shifting it left by `CFG_P.PARITY_BITS` without
+   first widening it to `CFG_P.CODEWORD_BITS` truncates the top parity-width
+   bits, so declare `dividend` as `CFG_P.CODEWORD_BITS` bits before the shift.
 3. Divide `dividend` by `CFG_P.GENERATOR_POLY_FULL` over `GF(2)` using a
    fixed unrolled loop from bit `CFG_P.CODEWORD_BITS-1` down to
    `CFG_P.PARITY_BITS`.
@@ -490,7 +618,7 @@ Interface:
 
 ```systemverilog
 module bch_syndrome #(
-  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG
+  parameter bch_pkg::bch_cfg_t CFG_P = bch_pkg::BCH31_2BYTE_T2_CFG_C
 ) (
   input  logic                         clk,
   input  logic                         rst_n,
@@ -630,8 +758,13 @@ Primary challenges:
 First implementation: optional smoke-test wrapper only.
 
 - Instantiate encoder and decoder with the same `CFG_P`.
-- Keep wrapper behavior simple: encode payload, optionally accept an external
-  error mask at the codeword boundary, then decode.
+- Keep wrapper behavior simple: encode payload, XOR in a testbench-supplied
+  error mask, then decode. Add one extra input port,
+  `ing_error_mask [CFG_P.CODEWORD_BITS-1:0]`, sampled alongside `ing_payload`;
+  the wrapper computes `corrupted_codeword = encoder_egr_codeword ^
+  ing_error_mask` and feeds `corrupted_codeword` into `bch_decoder`. The mask
+  is driven directly by cocotb (see Decoder Driving And Checking); it is not
+  computed or chosen by RTL.
 - Do not introduce AXI4-Stream, byte lanes, or packet framing here. Those are
   wrapper concerns after the BCH core is stable.
 
@@ -759,9 +892,37 @@ classify them as detected failure or documented miscorrection.
 
 ## Verification Architecture
 
-Use cocotb for RTL simulation and import the pure Python VIP. The AXI4-Stream
-parts of the testbench shall use the Python port of the existing
-`vip_axi4s_agent` from:
+Use cocotb for RTL simulation and import the pure Python VIP for expected
+values. Reuse the Python `vip_axi4s_agent` (driver, monitor, and sequence
+library) to drive and monitor every block directly through its plain
+`ing_`/`egr_` ports; no block gets its own AXI4-Stream wrapper module. The
+plain `ing_`/`egr_` valid/ready handshake used everywhere in this plan is
+structurally the same single-beat handshake AXI4-Stream uses
+(`valid`/`ready`, data held stable until accepted), so reusing the agent for
+every block gets four things for free instead of reimplementing them per
+block:
+
+- a configurable sequence library (`vip_axi4s_seq_lib.sv` /
+  `seq_lib/vip_axi4s_base_seq.py`) for directed and randomized traffic,
+  instead of hand-rolled per-block driving loops;
+- a monitor with existing stability/protocol checks (for example "signal
+  changed while valid was asserted and ready was low"), instead of
+  hand-written watchers;
+- configurable egress backpressure (stalling `tready`, which maps to
+  `egr_ready`) for none/input-stall/output-stall/both coverage, instead of a
+  bespoke stall generator per block; and
+- one shared driving/checking code path for every block, since all of them
+  expose the same plain `ing_`/`egr_` interface.
+
+The boundary is the SystemVerilog TB top, not a Python signal-name adapter.
+Each `rtl/tb/top/*` wrapper instantiates one or more `vip_axi4s_if` interfaces
+and wires their canonical AXI4S signals to the DUT's `ing_`/`egr_` ports. The
+Python test then gives the interface handle to the existing bus wrapper, for
+example `Axi4sBus(dut.ing_vif)` and `Axi4sBus(dut.egr_vif)`, and publishes
+those objects through `pyuvm.ConfigDB` as the agent `vif`. No
+`bch_vip_adapters.py` file is planned.
+
+The Python port lives at:
 
 ```text
 submodules/VIP/vip_axi4s_agent/py/
@@ -773,42 +934,159 @@ The SystemVerilog VIP core is available to FuseSoC through:
 submodules/VIP/vip_axi4s_agent/sv/vip_axi4s_agent.core
 ```
 
+The cocotb layer also needs `pyuvm`, because the Python AXI4S agent uses
+`ConfigDB`, `uvm_agent`, `uvm_driver`, `uvm_monitor`, sequence items, and
+sequencers. Keep that dependency in the RTL testbench environment; do not pull
+it into the reusable `vip_bch` golden model.
+
+Because the TB tops instantiate `vip_axi4s_if`, `bch_cocotb.core` shall depend
+on `submodules/VIP/vip_axi4s_agent/sv/vip_axi4s_agent.core`. The cocotb target
+must also put `submodules/VIP/vip_axi4s_agent/py` on `PYTHONPATH`.
+
+The TB top owns all signal mapping. For an encoder wrapper, the ingress map is:
+
+```text
+ing_vif.tvalid                  -> dut.ing_valid
+dut.ing_ready                   -> ing_vif.tready
+ing_vif.tdata[PAYLOAD_BITS-1:0] -> dut.ing_payload
+ing_vif.tid[ID_BITS-1:0]        -> dut.ing_id
+```
+
+The egress map is:
+
+```text
+dut.egr_valid                   -> egr_vif.tvalid
+egr_vif.tready                  -> dut.egr_ready
+dut.egr_codeword                -> egr_vif.tdata[CODEWORD_BITS-1:0]
+dut.egr_id                      -> egr_vif.tid[ID_BITS-1:0]
+1'b1 while egr_valid            -> egr_vif.tlast
+```
+
+Decoder and syndrome tops use the same pattern, with `ing_codeword`,
+`egr_payload`, `egr_s1`, and `egr_s3` mapped according to the block under
+test. DUT outputs that do not naturally fit the stream data field, such as
+`egr_uncorrectable`, `egr_error_count`, and `egr_corrected_codeword` when
+`tdata` carries only payload, remain named top-level observation signals or
+are explicitly packed into `tuser` by that wrapper. The first plan prefers
+named observation signals so the BCH scoreboard can sample them on the same
+`egr_vif.tvalid && egr_vif.tready` handshake without hiding status layout in a
+stream-sideband convention.
+
+For the codeword-carrying signals (`bch_syndrome.ing_codeword`,
+`bch_decoder.ing_codeword`, `bch_encoder.egr_codeword`,
+`bch_decoder.egr_corrected_codeword`), `CFG_P.CODEWORD_BITS` (`31`) is not a
+whole number of bytes. Configure the corresponding `vip_axi4s_if` and Python
+`Axi4sCfgT.TDATA_BYTES_P` as `ceil(CFG_P.CODEWORD_BITS / 8)` (`4` bytes, `32`
+bits, for the first profile). The TB top ties the unused top bit to `0` on
+drive and ignores it on observe.
+
+### Encoder Driving And Checking
+
+`bch_encoder.sv` is driven and monitored through `vip_axi4s_agent` by the TB
+top's `ing_vif` and `egr_vif`. The scoreboard reads
+`egr_codeword`/`egr_id` once `egr_vif.tvalid && egr_vif.tready` and compares
+them against `vip_bch.BchEncoder` (payload -> codeword) and a zero-syndrome
+check from `vip_bch.BchDecoder.syndrome()`.
+
+### Decoder Driving And Checking
+
+`bch_decoder.sv` is exercised two ways; both are part of the plan and both are
+driven through `vip_axi4s_agent` by TB-top `vip_axi4s_if` instances:
+
+1. Standalone, VIP-corrupted words (primary path for the Decoder RTL Plan
+   sweeps). `vip_bch` builds a legal codeword with `BchEncoder`, then
+   corrupts it in Python with `flip_bits`/`inject_errors`/
+   `all_error_patterns`. The corrupted integer is driven as `ing_codeword`
+   through the agent. All directed and exhaustive one-bit/two-bit/`t+1`
+   sweeps use this path, because it lets tests pick exact bit patterns
+   without needing an RTL-side fault injector, and it keeps decoder-only
+   failures isolated from the encoder.
+2. Chained through `bch_top.sv` (integration path only). `bch_top.sv`
+   instantiates the real `bch_encoder` and XORs its `egr_codeword` with a
+   testbench-supplied `ing_error_mask` (`CFG_P.CODEWORD_BITS` bits, driven
+   directly by cocotb, not computed in RTL) before presenting the corrupted
+   word to `bch_decoder`. This checks the encoder-to-decoder handoff and bit
+   ordering end to end, but it is not a substitute for path 1: keep the
+   exhaustive/directed decoder sweeps on the standalone path so failures are
+   easy to isolate to a single block.
+
+### Parameterized DUT Builds
+
+This plan uses two `CFG_P` profiles from the start, not just the default one,
+so the parameterized-build structure is exercised as soon as the first block
+exists: `bch_pkg::BCH31_2BYTE_T2_CFG_C` (the default, `PAYLOAD_BITS=16`, a
+2-byte payload) and `bch_pkg::BCH127_8BYTE_T2_CFG_C` (an independent base
+BCH(127,113,T=2) code over `GF(2^7)`, different `PRIMITIVE_POLYNOMIAL` and
+generator polynomial, `PAYLOAD_BITS=64` and `PAD_BITS=49`, an 8-byte
+payload). Unlike a same-code width variant, the second profile changes `M`,
+`N_BASE`, `K_BASE`, and every GF/generator constant, not just the widths
+that flow through ports, part-selects, and loop bounds — it is the primary
+parameterization risk called out for `bch_pkg.sv` and `bch_gf.sv` above
+*and* the first real exercise of `GF(2^M)` generality for `M != 5`; it is
+still not meant to be a second product deliverable. `ID_BITS` is
+deliberately identical between the two profiles: it is a pass-through
+sideband, not BCH math, and `vip_axi4s_agent` can drive an incrementing ID at
+any configured width, so varying `ID_BITS` would not exercise anything
+meaningful.
+
+Do not rely on overriding the packed `bch_cfg_t` parameter from the simulator
+command line; FuseSoC and open-source simulator support for overriding
+struct-typed parameters that way is inconsistent. Instead:
+
+- Add one small top-level wrapper file per `(block, profile)` pair under
+  `rtl/tb/top/`, for example `bch_encoder_top__bch31_2byte_t2.sv` and
+  `bch_encoder_top__bch127_8byte_t2.sv`, that only instantiates the block
+  with a fixed `#(.CFG_P(bch_pkg::<PROFILE_CFG>))` override. Create these
+  wrapper files (connectivity only, no BCH datapath) early, alongside
+  `bch_rtl.core` and `bch_cocotb.core`, before implementing any block's
+  datapath, so port names and VIF wiring can be reviewed first.
+- Give each wrapper its own FuseSoC target (for example `sim_encoder` and
+  `sim_encoder_8byte`) whose `toplevel` points at that wrapper.
+- Keep cocotb test modules under `tb/cocotb/tc/` profile-agnostic: at runtime
+  they read the profile under test from an environment variable such as
+  `BCH_PROFILE`, set by the FuseSoC target invocation, and import the
+  matching `CFG_P` fields from `vip_bch.rtl_config` for the scoreboard. The
+  same Python test file then runs unmodified against every compiled top.
+- Add a regression driver (for example `rtl/tb/run_regression.sh` or a
+  Makefile target) that loops over the profile/target list, runs each FuseSoC
+  target, and aggregates pass/fail so "run all tests" is one command.
+
+Adding a third profile later (for example the shortened-codeword mode in Open
+Decisions) only means adding another wrapper file and FuseSoC target per
+block; the mechanism does not change.
+
 ```text
 rtl/tb/cocotb/
   conftest.py
-  bch_dut_if.py
-  bch_axis_adapters.py
-  test_bch_encoder.py
-  test_bch_syndrome.py
-  test_bch_decoder.py
-  test_bch_top.py
+  bch_clk_rst.py
+  tc/
+    test_bch_encoder.py
+    test_bch_syndrome.py
+    test_bch_decoder.py
+    test_bch_top.py
 ```
 
-`bch_dut_if.py`
-: Clock/reset helpers and direct core valid/ready monitors.
+`bch_clk_rst.py`
+: Clock generation and `rst_n` reset sequencing shared by every test.
 
-`bch_axis_adapters.py`
-: Thin helpers around the Python `vip_axi4s_agent` to send payload and
-  codeword transactions through `bch_axis_encoder.sv` and
-  `bch_axis_decoder.sv`. BCH-specific expected values still come from
-  `vip_bch`; AXI4S VIP only drives and observes the stream protocol.
-
-`test_bch_encoder.py`
+`tc/test_bch_encoder.py`
 : Payload-to-codeword checks against `BchEncoder`.
 
-`test_bch_syndrome.py`
+`tc/test_bch_syndrome.py`
 : Syndrome RTL checks against `BchDecoder.syndrome()` or a dedicated VIP
   syndrome helper.
 
-`test_bch_decoder.py`
+`tc/test_bch_decoder.py`
 : Codeword fault-injection checks against `BchDecoder`.
 
-`test_bch_top.py`
+`tc/test_bch_top.py`
 : End-to-end encode, inject, decode flow after block-level tests pass.
 
 The cocotb tests should not reimplement BCH math. They should call `vip_bch`
-for expected values and use `vip_axi4s_agent` for stream driving/monitoring.
-Core-only tests may still use direct valid/ready helpers for bringup.
+for expected values and `vip_axi4s_agent` for driving/monitoring through the
+TB-top VIFs. Ad hoc direct signal pokes are fine for one-off local bringup,
+but committed test cases should drive through the shared VIF path like every
+other block.
 
 `bch_verilog` may be used for side-by-side investigation of equations and
 latency tradeoffs, but not for expected results. If an old-vector comparison is
@@ -864,11 +1142,52 @@ Decoder error patterns:
 For BCH(31, 21, t=2), exhaustive two-bit locations are only `31 choose 2 =
 465` patterns per payload, so they are cheap for a directed payload subset.
 
+### Error-Pattern Combinatorics At Larger Codeword Widths
+
+The number of unique bit-position combinations for a two-bit error is
+`C(n,2) = n*(n-1)/2`, and for a three-bit error is
+`C(n,3) = n*(n-1)*(n-2)/6`, where `n` is the codeword width. These counts
+grow fast, so before assuming exhaustive position sweeps stay affordable for
+a larger future profile, here they are for the two current profiles and for
+hypothetical profiles sized to carry 16, 32, and 64 bytes of user data. Full
+primitive BCH codeword lengths only exist at `n_base = 2^M - 1`, so actual
+`n` jumps in powers of two (`31`, `127`, `511`, ...) rather than tracking
+payload size smoothly; the hypothetical rows below still use the rough
+`n ≈ 8 * bytes` approximation for order-of-magnitude planning only (the
+parity overhead for a fixed `T` shrinks as a fraction of `n` as `n` grows, so
+it does not change the order of magnitude), and the real 8-byte profile's
+`n=127` is already well above that rough estimate:
+
+| Payload size | `n` (bits) | Two-bit combinations `C(n,2)` | Three-bit combinations `C(n,3)` |
+| --- | ---: | ---: | ---: |
+| Default profile (2 bytes, `n=31`) | 31 | 465 | 4,495 |
+| Second profile (8 bytes, `n=127`, actual) | 127 | 8,001 | 333,375 |
+| 16 bytes (hypothetical, approx.) | 128 | 8,128 | 341,376 |
+| 32 bytes (hypothetical, approx.) | 256 | 32,640 | 2,763,520 |
+| 64 bytes (hypothetical, approx.) | 512 | 130,816 | 22,238,720 |
+
+These counts are per payload, not multiplied by the number of directed
+payloads. Exhaustive two-bit sweeps stay cheap (at most ~131k position
+combinations) even at 64 bytes, so keep sweeping every two-bit position for a
+directed payload subset for both current profiles. Exhaustive three-bit
+sweeps are realistic for both current profiles (up to ~333k cases for the
+127-bit profile) and up to roughly the 16-byte hypothetical size; past a few
+hundred thousand cases (32 bytes and up), run three-bit errors against a
+small directed/random position and payload subset instead of full
+enumeration, and budget simulation time explicitly before committing to
+exhaustive coverage at any larger profile.
+
 ## Protocol And Sanity Checks
 
-Do protocol checking in cocotb using the Python `vip_axi4s_agent` for AXI4S
-wrappers and lightweight direct monitors for core valid/ready bringup. Formal
-protocol checks are not part of the first plan.
+Do protocol checking in cocotb using the Python `vip_axi4s_agent` through the
+TB-top `vip_axi4s_if` instances for every block
+(see Verification Architecture). Its monitor already reports stability
+violations for AXI4S fields (for example a data/id/valid change while
+`valid && !ready`), so the checks below reuse that instead of hand-written
+watchers where the field is carried on the VIF. Extra DUT status outputs that
+remain as named top-level observation signals need small cocotb stability
+checks sampled on the same egress handshake. Formal (SVA) protocol checks are
+still not part of the first plan.
 
 Simulation checks should cover:
 
@@ -885,8 +1204,9 @@ Simulation checks should cover:
   has zero syndrome or the selected over-capability policy explicitly permits
   miscorrection.
 
-The AXI4S VIP owns stream protocol behavior; `vip_bch` owns BCH math expected
-values.
+The `vip_axi4s_agent` monitor owns stream/handshake protocol behavior for
+fields carried on the VIFs; cocotb owns any extra status-output stability
+checks; `vip_bch` owns BCH math expected values.
 
 ## Coverage
 
@@ -910,8 +1230,11 @@ Preferred tools for the first pass:
 - Vivado for the first synthesis build.
 - XSIM or another FuseSoC-driven simulator for RTL/cocotb smoke tests.
 - cocotb for simulation control and scoreboarding.
+- pyUVM for the Python `vip_axi4s_agent` configuration database and agent
+  classes.
 - pytest for VIP-only tests.
-- The Python `vip_axi4s_agent` for AXI4-Stream DUT driving in cocotb tests.
+- The Python `vip_axi4s_agent` for valid/ready transaction driving through
+  TB-top `vip_axi4s_if` instances in cocotb tests.
 
 Planned core files:
 
@@ -925,14 +1248,20 @@ The BCH FuseSoC cores should reference the submodule core by dependency rather
 than copying VIP files into this project. The cocotb target must also put
 `submodules/VIP/vip_axi4s_agent/py` on `PYTHONPATH`.
 
-Initial FuseSoC targets:
+Initial FuseSoC targets, one pair per `CFG_P` profile for the block-level
+targets (see Parameterized DUT Builds); `sim_top` is a single default-profile
+integration target, matching the single `bch_top_top__bch31_2byte_t2.sv`
+wrapper in RTL Scope:
 
 | Target | Purpose |
 | --- | --- |
-| `sim_encoder` | cocotb encoder wrapper/core tests. |
-| `sim_syndrome` | cocotb syndrome tests. |
-| `sim_decoder` | cocotb decoder tests. |
-| `sim_top` | end-to-end AXI4S wrapper tests. |
+| `sim_encoder` | cocotb encoder tests, `BCH31_2BYTE_T2_CFG_C`. |
+| `sim_encoder_8byte` | cocotb encoder tests, `BCH127_8BYTE_T2_CFG_C`. |
+| `sim_syndrome` | cocotb syndrome tests, `BCH31_2BYTE_T2_CFG_C`. |
+| `sim_syndrome_8byte` | cocotb syndrome tests, `BCH127_8BYTE_T2_CFG_C`. |
+| `sim_decoder` | cocotb decoder tests, `BCH31_2BYTE_T2_CFG_C`. |
+| `sim_decoder_8byte` | cocotb decoder tests, `BCH127_8BYTE_T2_CFG_C`. |
+| `sim_top` | end-to-end integration tests, `BCH31_2BYTE_T2_CFG_C` only. |
 | `synth_vivado` | First Vivado synthesis run. |
 
 Every regression should print:
@@ -951,16 +1280,23 @@ Every regression should print:
 - Whether error locations are exported from decoder RTL or kept internal.
 - Whether a later decoder replaces serial Chien search with parallel or
   table-assisted search.
-- Whether a later transport wrapper should be AXI4-Stream.
+- Whether `bch_decoder.sv` should be pipelined to accept a new transaction
+  every cycle (replicated per-transaction search state, or a parallel Chien
+  search) instead of the first-pass single-transaction-in-flight design.
 
 ## Milestones
 
 1. Confirm bit ordering and detected-failure uncorrectable policy.
 2. Generate known-good vectors from `vip_bch`.
-3. Implement `bch_pkg.sv` `bch_cfg_t`, default `CFG_P`, and static checks.
-4. Implement and verify `bch_gf.sv` helper operations.
-5. Implement and verify `bch_encoder.sv`.
-6. Implement and verify `bch_syndrome.sv`.
-7. Implement and verify `bch_decoder.sv`.
-8. Add integration wrapper and end-to-end cocotb tests.
-9. Add lint/regression command and document how to run it.
+3. Create `bch_rtl.core`/`bch_cocotb.core` skeletons and stub `tb/top/`
+   wrapper modules (connectivity only, no BCH datapath) for both `CFG_P`
+   profiles, for early port-name and VIF-wiring review before any datapath is
+   implemented.
+4. Implement `bch_pkg.sv` `bch_cfg_t`, both `CFG_P` profiles, and static
+   checks.
+5. Implement and verify `bch_gf.sv` helper operations.
+6. Implement and verify `bch_encoder.sv`.
+7. Implement and verify `bch_syndrome.sv`.
+8. Implement and verify `bch_decoder.sv`.
+9. Add integration wrapper and end-to-end cocotb tests.
+10. Add lint/regression command and document how to run it.

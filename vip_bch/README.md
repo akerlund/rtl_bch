@@ -29,8 +29,9 @@ widths must be byte-granular: 1 byte, 2 bytes, 4 bytes, and so on. The normal
 encoder input is therefore `payload_bytes`, not an odd number of message bits.
 
 BCH codes often have a natural message length `k` that is not divisible by 8.
-The VIP shall handle that internally by shortening or padding the underlying
-BCH code while keeping the user-facing payload byte-aligned.
+The first profile handles that internally with deterministic zero padding while
+keeping the user-facing payload byte-aligned. Shortened codeword transport is a
+later option after the full-length padded profile is verified.
 
 Required behavior:
 
@@ -54,8 +55,8 @@ Required behavior:
 | `k_base` | Natural message length after generator polynomial construction. |
 | `payload_bytes` | User-visible payload size in bytes. |
 | `payload_bits` | User-visible payload size in bits, equal to `8 * payload_bytes`. |
-| `pad_bits` | Internal unused message bits, equal to `k_base - payload_bits` before shortening. |
-| `n` | Transmitted codeword length after any shortening policy is applied. |
+| `pad_bits` | Internal unused message bits, equal to `k_base - payload_bits`. |
+| `n` | Transmitted codeword length. Initially this is the full base length, `n_base`. |
 | `parity_bits` | Check bits in the transmitted codeword. |
 | `generator_polynomial` | Derived generator polynomial, exposed for debug and RTL parameter generation. |
 
@@ -144,8 +145,8 @@ received, positions = inject_errors(codeword, width=cfg.n, count=cfg.t, rng=rng)
 ```
 
 Bit position `0` means integer bit `0`, the least significant bit. Any serial
-or bus-specific bit ordering conversion should happen in one named adapter in
-the module-local cocotb environment.
+or bus-specific bit ordering conversion should happen at a named RTL TB top or
+transport-wrapper boundary, not inside the BCH math model.
 
 ## Package Layout
 

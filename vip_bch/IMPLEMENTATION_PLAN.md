@@ -101,29 +101,41 @@ Optional verification-oracle imports:
 oracle tests when it is unavailable or keep known-good vectors in the repo.
 The core encoder and decoder must not depend on it.
 
-Optional cocotb-layer imports:
+Optional RTL-testbench imports outside reusable `vip_bch`:
 
 | Library | Purpose |
 | --- | --- |
 | `cocotb` | Module-local RTL tests and clock/reset orchestration. |
 | `cocotb.triggers` | Clock edges, timers, and reset sequencing. |
 | `cocotb.queue` | Optional monitor/scoreboard queues for streaming interfaces. |
-| `pyuvm` | Configuration database support used by the Python AXI4S VIP. |
-| `submodules/VIP/vip_axi4s_agent/py` | Python AXI4-Stream agent used to drive and monitor RTL stream wrappers. |
+| `pyuvm` | Configuration database and agent base classes used by the Python AXI4S VIP. |
+| `submodules/VIP/vip_axi4s_agent/py` | Python AXI4-Stream agent used by RTL tests for valid/ready driving and monitoring. |
+
+The RTL testbench drives and monitors the DUT with `vip_axi4s_agent`;
+`vip_bch` is not part of that driving path. `vip_bch` is only consumed by the
+TB's scoreboard, which calls it for expected codewords, syndromes, and decode
+results to compare against observed DUT transactions. `vip_bch` itself does
+not need to import or otherwise know about `vip_axi4s_agent` or `pyuvm`; keep
+that driver/scoreboard separation so `vip_bch` stays a plain reference model.
 
 The reusable `vip_bch.py` model modules should not import `cocotb`. Put
-cocotb-specific drivers, monitors, and adapters in module-local test code or a
-separate adapter module.
+cocotb-specific drivers, monitors, and VIF binding code in the RTL testbench
+area. Signal-name translation belongs in the SystemVerilog TB tops that
+connect `vip_axi4s_if` to DUT `ing_`/`egr_` ports, not in the reusable BCH
+model package.
 
 The BCH VIP owns expected BCH values. The AXI4S VIP owns only stream protocol
 driving and monitoring; it must not duplicate BCH math.
 
 ## Plan Improvements
 
-- Split the pure BCH model from cocotb adapters so the reference model can be
-  unit-tested without a simulator.
-- Make byte ordering part of `BchConfig`, with a default such as `"big"` for
-  `bytes` conversion and explicit helpers for RTL serial order.
+- Split the pure BCH model from RTL/cocotb testbench code so the reference
+  model can be unit-tested without a simulator.
+- Byte ordering is part of the RTL Compatibility Contract below: `BchConfig`
+  uses little-endian (`int.from_bytes(payload, "little")`) for `bytes`
+  conversion, matching common RTL byte-lane convention. Keep this fixed for
+  the first profile and add explicit helpers only for RTL serial order, not
+  an alternate byte-order mode.
 - Treat full-length 31-bit transmission with 5 internal zero pad bits as the
   initial profile. Add shortened codewords only after the full-length encoder,
   syndrome, and decoder are stable.
@@ -148,7 +160,6 @@ helper that maps `BchConfig` fields to this RTL shape:
 | `PRIMITIVE_POLYNOMIAL` | `cfg.primitive_polynomial` |
 | `N_BASE` | `cfg.n_base` |
 | `K_BASE` | `cfg.k_base` |
-| `PAYLOAD_BYTES` | `cfg.payload_bytes` |
 | `PAYLOAD_BITS` | `cfg.payload_bits` |
 | `PAD_BITS` | `cfg.pad_bits` |
 | `PARITY_BITS` | `cfg.parity_bits` |
@@ -172,13 +183,13 @@ For the initial BCH(31, 21, t=2) profile, the generated RTL fields must include:
 | `GENERATOR_LFSR_TAPS` | `0x369` |
 
 The VIP tests must fail if these values drift, because the RTL package will
-copy them into `bch_pkg::BCH31_2BYTE_T2_CFG`.
+copy them into `bch_pkg::BCH31_2BYTE_T2_CFG_C`.
 
 The systematic codeword layout is also part of the shared contract:
 
 ```text
 codeword[9:0]   = parity bits
-codeword[25:10] = 16-bit payload, using big-endian byte conversion
+codeword[25:10] = 16-bit payload, using little-endian byte conversion
 codeword[30:26] = five deterministic zero pad bits
 ```
 
