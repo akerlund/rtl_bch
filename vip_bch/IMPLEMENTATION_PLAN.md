@@ -109,7 +109,7 @@ Optional RTL-testbench imports outside reusable `vip_bch`:
 | `cocotb.triggers` | Clock edges, timers, and reset sequencing. |
 | `cocotb.queue` | Optional monitor/scoreboard queues for streaming interfaces. |
 | `pyuvm` | Configuration database and agent base classes used by the Python AXI4S VIP. |
-| `submodules/VIP/vip_axi4s_agent/py` | Python AXI4-Stream agent used by RTL tests for valid/ready driving and monitoring. |
+| `submodules/vip_axi4s_agent/py` | Python AXI4-Stream agent used by RTL tests for valid/ready driving and monitoring. |
 
 The RTL testbench drives and monitors the DUT with `vip_axi4s_agent`;
 `vip_bch` is not part of that driving path. `vip_bch` is only consumed by the

@@ -249,33 +249,40 @@ combined wrapper:
 ```text
 rtl/
   IMPLEMENTATION_PLAN.md
-  src/
-    bch_pkg.sv
-    bch_gf.sv
-    bch_encoder.sv
-    bch_syndrome.sv
-    bch_decoder.sv
-    bch_top.sv
-    bch_rtl.core
-  tb/
-    top/
-      bch_encoder_top__bch31_2byte_t2.sv
-      bch_encoder_top__bch127_8byte_t2.sv
-      bch_syndrome_top__bch31_2byte_t2.sv
-      bch_syndrome_top__bch127_8byte_t2.sv
-      bch_decoder_top__bch31_2byte_t2.sv
-      bch_decoder_top__bch127_8byte_t2.sv
-      bch_top_top__bch31_2byte_t2.sv
-    cocotb/
-      conftest.py
-      bch_clk_rst.py
-      tc/
-        test_bch_encoder.py
-        test_bch_syndrome.py
-        test_bch_decoder.py
-        test_bch_top.py
-    bch_cocotb.core
+  bch_pkg.sv
+  bch_gf.sv
+  bch_encoder.sv
+  bch_syndrome.sv
+  bch_decoder.sv
+  bch_top.sv
+  bch_rtl.core
+tb/
+  README.md
+  bch_cocotb.core
+  top/
+    bch_encoder_top__bch31_2byte_t2.sv
+    bch_encoder_top__bch127_8byte_t2.sv
+    bch_syndrome_top__bch31_2byte_t2.sv
+    bch_syndrome_top__bch127_8byte_t2.sv
+    bch_decoder_top__bch31_2byte_t2.sv
+    bch_decoder_top__bch127_8byte_t2.sv
+    bch_top_top__bch31_2byte_t2.sv
+tc/
+  README.md
+  bch_base_test.py
+  tc_bch_encoder.py
+  tc_bch_syndrome.py
+  tc_bch_decoder.py
+  tc_bch_top.py
 ```
+
+Following the sibling `rtl_secded` project's layout: `rtl/` is design sources only,
+`tb/` is reusable testbench support (one base cocotb helper module, the FuseSoC
+cocotb core, and the profile-fixed `top/` wrappers), and `tc/` holds every
+testcase module, cocotb or plain pytest, all prefixed `tc_*`. There is no
+separate `cocotb/` subdirectory under `tb/`: cocotb is the only simulation
+flow this project uses, so a nested `tb/cocotb/` layer would just repeat that
+fact in the path for no benefit.
 
 The submodule VIP `.core` files use CAPI2 VLNV names such as
 `akerlund::vip_axi4s_agent:0`. Give the new `.core` files an explicit VLNV
@@ -399,7 +406,7 @@ must still tolerate backpressure at input and output.
 
 ## Coding Style
 
-- Follow the style used in `submodules/VIP/vip_axi4s_agent/sv`.
+- Follow the style used in `submodules/vip_axi4s_agent/sv`.
 - Use two spaces per indentation level everywhere.
 - All sequential logic uses `always_ff`.
 - All combinational logic uses `always_comb` or continuous assignments.
@@ -915,7 +922,7 @@ block:
   expose the same plain `ing_`/`egr_` interface.
 
 The boundary is the SystemVerilog TB top, not a Python signal-name adapter.
-Each `rtl/tb/top/*` wrapper instantiates one or more `vip_axi4s_if` interfaces
+Each `tb/top/*` wrapper instantiates one or more `vip_axi4s_if` interfaces
 and wires their canonical AXI4S signals to the DUT's `ing_`/`egr_` ports. The
 Python test then gives the interface handle to the existing bus wrapper, for
 example `Axi4sBus(dut.ing_vif)` and `Axi4sBus(dut.egr_vif)`, and publishes
@@ -925,13 +932,13 @@ those objects through `pyuvm.ConfigDB` as the agent `vif`. No
 The Python port lives at:
 
 ```text
-submodules/VIP/vip_axi4s_agent/py/
+submodules/vip_axi4s_agent/py/
 ```
 
 The SystemVerilog VIP core is available to FuseSoC through:
 
 ```text
-submodules/VIP/vip_axi4s_agent/sv/vip_axi4s_agent.core
+submodules/vip_axi4s_agent/sv/vip_axi4s_agent.core
 ```
 
 The cocotb layer also needs `pyuvm`, because the Python AXI4S agent uses
@@ -940,8 +947,8 @@ sequencers. Keep that dependency in the RTL testbench environment; do not pull
 it into the reusable `vip_bch` golden model.
 
 Because the TB tops instantiate `vip_axi4s_if`, `bch_cocotb.core` shall depend
-on `submodules/VIP/vip_axi4s_agent/sv/vip_axi4s_agent.core`. The cocotb target
-must also put `submodules/VIP/vip_axi4s_agent/py` on `PYTHONPATH`.
+on `submodules/vip_axi4s_agent/sv/vip_axi4s_agent.core`. The cocotb target
+must also put `submodules/vip_axi4s_agent/py` on `PYTHONPATH`.
 
 The TB top owns all signal mapping. For an encoder wrapper, the ingress map is:
 
@@ -1034,7 +1041,7 @@ command line; FuseSoC and open-source simulator support for overriding
 struct-typed parameters that way is inconsistent. Instead:
 
 - Add one small top-level wrapper file per `(block, profile)` pair under
-  `rtl/tb/top/`, for example `bch_encoder_top__bch31_2byte_t2.sv` and
+  `tb/top/`, for example `bch_encoder_top__bch31_2byte_t2.sv` and
   `bch_encoder_top__bch127_8byte_t2.sv`, that only instantiates the block
   with a fixed `#(.CFG_P(bch_pkg::<PROFILE_CFG>))` override. Create these
   wrapper files (connectivity only, no BCH datapath) early, alongside
@@ -1042,44 +1049,42 @@ struct-typed parameters that way is inconsistent. Instead:
   datapath, so port names and VIF wiring can be reviewed first.
 - Give each wrapper its own FuseSoC target (for example `sim_encoder` and
   `sim_encoder_8byte`) whose `toplevel` points at that wrapper.
-- Keep cocotb test modules under `tb/cocotb/tc/` profile-agnostic: at runtime
+- Keep cocotb test modules under `tc/` profile-agnostic: at runtime
   they read the profile under test from an environment variable such as
   `BCH_PROFILE`, set by the FuseSoC target invocation, and import the
   matching `CFG_P` fields from `vip_bch.rtl_config` for the scoreboard. The
   same Python test file then runs unmodified against every compiled top.
-- Add a regression driver (for example `rtl/tb/run_regression.sh` or a
-  Makefile target) that loops over the profile/target list, runs each FuseSoC
-  target, and aggregates pass/fail so "run all tests" is one command.
+- Add a regression driver (for example `run_regression.sh` or a Makefile
+  target) that loops over the profile/target list, runs each FuseSoC target,
+  and aggregates pass/fail so "run all tests" is one command.
 
 Adding a third profile later (for example the shortened-codeword mode in Open
 Decisions) only means adding another wrapper file and FuseSoC target per
 block; the mechanism does not change.
 
 ```text
-rtl/tb/cocotb/
-  conftest.py
-  bch_clk_rst.py
-  tc/
-    test_bch_encoder.py
-    test_bch_syndrome.py
-    test_bch_decoder.py
-    test_bch_top.py
+tc/
+  bch_base_test.py
+  tc_bch_encoder.py
+  tc_bch_syndrome.py
+  tc_bch_decoder.py
+  tc_bch_top.py
 ```
 
-`bch_clk_rst.py`
+`tc/bch_base_test.py`
 : Clock generation and `rst_n` reset sequencing shared by every test.
 
-`tc/test_bch_encoder.py`
+`tc/tc_bch_encoder.py`
 : Payload-to-codeword checks against `BchEncoder`.
 
-`tc/test_bch_syndrome.py`
+`tc/tc_bch_syndrome.py`
 : Syndrome RTL checks against `BchDecoder.syndrome()` or a dedicated VIP
   syndrome helper.
 
-`tc/test_bch_decoder.py`
+`tc/tc_bch_decoder.py`
 : Codeword fault-injection checks against `BchDecoder`.
 
-`tc/test_bch_top.py`
+`tc/tc_bch_top.py`
 : End-to-end encode, inject, decode flow after block-level tests pass.
 
 The cocotb tests should not reimplement BCH math. They should call `vip_bch`
@@ -1239,14 +1244,14 @@ Preferred tools for the first pass:
 Planned core files:
 
 ```text
-rtl/src/bch_rtl.core
-rtl/tb/bch_cocotb.core
-submodules/VIP/vip_axi4s_agent/sv/vip_axi4s_agent.core
+rtl/bch_rtl.core
+tb/bch_cocotb.core
+submodules/vip_axi4s_agent/sv/vip_axi4s_agent.core
 ```
 
 The BCH FuseSoC cores should reference the submodule core by dependency rather
 than copying VIP files into this project. The cocotb target must also put
-`submodules/VIP/vip_axi4s_agent/py` on `PYTHONPATH`.
+`submodules/vip_axi4s_agent/py` on `PYTHONPATH`.
 
 Initial FuseSoC targets, one pair per `CFG_P` profile for the block-level
 targets (see Parameterized DUT Builds); `sim_top` is a single default-profile
