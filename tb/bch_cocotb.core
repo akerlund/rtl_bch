@@ -1,0 +1,75 @@
+CAPI=2:
+name: "rtl_bch::bch_cocotb:0"
+description: "cocotb tests for BCH encoder/decoder RTL"
+
+filesets:
+  tb_top:
+    files:
+      - top/bch_encoder_top__bch31_2byte_t2.sv
+      - top/bch_encoder_top__bch127_8byte_t2.sv
+      - top/bch_syndrome_top__bch31_2byte_t2.sv
+      - top/bch_syndrome_top__bch127_8byte_t2.sv
+      - top/bch_decoder_top__bch31_2byte_t2.sv
+      - top/bch_decoder_top__bch127_8byte_t2.sv
+      - top/bch_top_top__bch31_2byte_t2.sv
+    file_type: systemVerilogSource
+    depend:
+      - "rtl_bch::bch_rtl:0"
+      - "akerlund::vip_axi4s_agent:0"
+
+  # bch_gf.sv's helpers are plain package functions with no valid/ready
+  # ports; these tops poke/observe them directly instead of going through
+  # vip_axi4s_if (see top/bch_gf_top__bch31_2byte_t2.sv).
+  tb_gf:
+    files:
+      - top/bch_gf_top__bch31_2byte_t2.sv
+      - top/bch_gf_top__bch127_8byte_t2.sv
+    file_type: systemVerilogSource
+    depend:
+      - "rtl_bch::bch_rtl:0"
+
+targets:
+  encoder_bch31_2byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_encoder_top__bch31_2byte_t2
+
+  encoder_bch127_8byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_encoder_top__bch127_8byte_t2
+
+  syndrome_bch31_2byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_syndrome_top__bch31_2byte_t2
+
+  syndrome_bch127_8byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_syndrome_top__bch127_8byte_t2
+
+  decoder_bch31_2byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_decoder_top__bch31_2byte_t2
+
+  decoder_bch127_8byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_decoder_top__bch127_8byte_t2
+
+  top_bch31_2byte_t2:
+    filesets:
+      - tb_top
+    toplevel: bch_top_top__bch31_2byte_t2
+
+  gf_bch31_2byte_t2:
+    filesets:
+      - tb_gf
+    toplevel: bch_gf_top__bch31_2byte_t2
+
+  gf_bch127_8byte_t2:
+    filesets:
+      - tb_gf
+    toplevel: bch_gf_top__bch127_8byte_t2
