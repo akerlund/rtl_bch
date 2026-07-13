@@ -1,0 +1,47 @@
+CAPI=2:
+name: "rtl_bch::bch_rtl:0"
+description: "BCH encoder/decoder RTL"
+
+filesets:
+  rtl:
+    files:
+      - bch_pkg.sv
+      - bch_gf.sv
+      - bch_encoder.sv
+      - bch_syndrome.sv
+      - bch_decoder.sv
+      - bch_top.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets:
+      - rtl
+    toplevel: bch_top
+
+  encoder:
+    filesets:
+      - rtl
+    toplevel: bch_encoder
+
+  syndrome:
+    filesets:
+      - rtl
+    toplevel: bch_syndrome
+
+  decoder:
+    filesets:
+      - rtl
+    toplevel: bch_decoder
+
+  # Unverified: no Vivado install is available in this environment, so this
+  # target has not been run. Kept as documented intent for the first
+  # synthesis pass (see rtl/IMPLEMENTATION_PLAN.md, Build And Regression).
+  synth_vivado:
+    default_tool: vivado
+    filesets:
+      - rtl
+    toplevel: bch_top
+    tools:
+      vivado:
+        part: xc7a35tcpg236-1
