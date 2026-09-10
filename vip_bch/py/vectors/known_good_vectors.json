@@ -1,0 +1,555 @@
+{
+  "bch127_8byte_t2": {
+    "cfg_p": {
+      "CODEWORD_BITS": 127,
+      "GENERATOR_LFSR_TAPS": 887,
+      "GENERATOR_POLY_FULL": 17271,
+      "GF_PRIMITIVE_POLY_FULL": 137,
+      "GF_REDUCTION_POLY": 9,
+      "ID_BITS": 8,
+      "K_BASE": 113,
+      "M": 7,
+      "N_BASE": 127,
+      "PAD_BITS": 49,
+      "PARITY_BITS": 14,
+      "PAYLOAD_BITS": 64,
+      "PRIMITIVE_POLYNOMIAL": 137,
+      "T": 2
+    },
+    "decode_vectors": [
+      {
+        "case": "clean",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 0,
+        "error_locations": [],
+        "injected_errors": [],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x3fffe806",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_parity_lsb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          0
+        ],
+        "injected_errors": [
+          0
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x3fffe807",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_parity_msb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          13
+        ],
+        "injected_errors": [
+          13
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x3fffc806",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_payload_lsb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          14
+        ],
+        "injected_errors": [
+          14
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x3fffa806",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_payload_msb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          77
+        ],
+        "injected_errors": [
+          77
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x2000000000003fffe806",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_pad_lsb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          78
+        ],
+        "injected_errors": [
+          78
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x4000000000003fffe806",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_pad_msb",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 1,
+        "error_locations": [
+          126
+        ],
+        "injected_errors": [
+          126
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x4000000000000000000000003fffe806",
+        "uncorrectable": false
+      },
+      {
+        "case": "two_bit",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 2,
+        "error_locations": [
+          77,
+          78
+        ],
+        "injected_errors": [
+          77,
+          78
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0x6000000000003fffe806",
+        "uncorrectable": false
+      },
+      {
+        "case": "t_plus_1",
+        "corrected_codeword_hex": "0x10020000000003fffe801",
+        "error_count": 2,
+        "error_locations": [
+          69,
+          80
+        ],
+        "injected_errors": [
+          0,
+          1,
+          2
+        ],
+        "payload_hex": "ffff000000008000",
+        "received_hex": "0x3fffe801",
+        "uncorrectable": false
+      },
+      {
+        "case": "random_t_errors",
+        "corrected_codeword_hex": "0x3fffe806",
+        "error_count": 2,
+        "error_locations": [
+          14,
+          31
+        ],
+        "injected_errors": [
+          14,
+          31
+        ],
+        "payload_hex": "ffff000000000000",
+        "received_hex": "0xbfffa806",
+        "uncorrectable": false
+      }
+    ],
+    "encode_vectors": [
+      {
+        "codeword_hex": "0x0",
+        "parity_hex": "0x0",
+        "payload_hex": "0x0",
+        "payload_int": 0,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3fe1f1",
+        "parity_hex": "0x21f1",
+        "payload_hex": "0xff",
+        "payload_int": 255,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x48d2ae2",
+        "parity_hex": "0x2ae2",
+        "payload_hex": "0x1234",
+        "payload_int": 4660,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x15555802",
+        "parity_hex": "0x1802",
+        "payload_hex": "0x5555",
+        "payload_int": 21845,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x20005f72",
+        "parity_hex": "0x1f72",
+        "payload_hex": "0x8001",
+        "payload_int": 32769,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x2aaab004",
+        "parity_hex": "0x3004",
+        "payload_hex": "0xaaaa",
+        "payload_int": 43690,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x2af36f9c",
+        "parity_hex": "0x2f9c",
+        "payload_hex": "0xabcd",
+        "payload_int": 43981,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3fc009f7",
+        "parity_hex": "0x9f7",
+        "payload_hex": "0xff00",
+        "payload_int": 65280,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3fffe806",
+        "parity_hex": "0x2806",
+        "payload_hex": "0xffff",
+        "payload_int": 65535,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "generator_module": "vip_bch.vectors",
+    "generator_polynomial_hex": "0x4377",
+    "gf_table_checksum_hex": "0x1fc0",
+    "profile": "bch127_8byte_t2",
+    "seed": 48151
+  },
+  "bch31_2byte_t2": {
+    "cfg_p": {
+      "CODEWORD_BITS": 31,
+      "GENERATOR_LFSR_TAPS": 873,
+      "GENERATOR_POLY_FULL": 1897,
+      "GF_PRIMITIVE_POLY_FULL": 37,
+      "GF_REDUCTION_POLY": 5,
+      "ID_BITS": 8,
+      "K_BASE": 21,
+      "M": 5,
+      "N_BASE": 31,
+      "PAD_BITS": 5,
+      "PARITY_BITS": 10,
+      "PAYLOAD_BITS": 16,
+      "PRIMITIVE_POLYNOMIAL": 37,
+      "T": 2
+    },
+    "decode_vectors": [
+      {
+        "case": "clean",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 0,
+        "error_locations": [],
+        "injected_errors": [],
+        "payload_hex": "ffff",
+        "received_hex": "0x3ffff5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_parity_lsb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          0
+        ],
+        "injected_errors": [
+          0
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x3ffff5e",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_parity_msb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          9
+        ],
+        "injected_errors": [
+          9
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x3fffd5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_payload_lsb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          10
+        ],
+        "injected_errors": [
+          10
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x3fffb5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_payload_msb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          25
+        ],
+        "injected_errors": [
+          25
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x1ffff5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_pad_lsb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          26
+        ],
+        "injected_errors": [
+          26
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x7ffff5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "one_bit_pad_msb",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 1,
+        "error_locations": [
+          30
+        ],
+        "injected_errors": [
+          30
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x43ffff5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "two_bit",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 2,
+        "error_locations": [
+          25,
+          26
+        ],
+        "injected_errors": [
+          25,
+          26
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x5ffff5f",
+        "uncorrectable": false
+      },
+      {
+        "case": "t_plus_1",
+        "corrected_codeword_hex": null,
+        "error_count": 3,
+        "error_locations": [],
+        "injected_errors": [
+          0,
+          1,
+          2
+        ],
+        "payload_hex": null,
+        "received_hex": "0x3ffff58",
+        "uncorrectable": true
+      },
+      {
+        "case": "random_t_errors",
+        "corrected_codeword_hex": "0x3ffff5f",
+        "error_count": 2,
+        "error_locations": [
+          3,
+          7
+        ],
+        "injected_errors": [
+          3,
+          7
+        ],
+        "payload_hex": "ffff",
+        "received_hex": "0x3ffffd7",
+        "uncorrectable": false
+      }
+    ],
+    "encode_vectors": [
+      {
+        "codeword_hex": "0x0",
+        "parity_hex": "0x0",
+        "payload_hex": "0x0",
+        "payload_int": 0,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3fe31",
+        "parity_hex": "0x231",
+        "payload_hex": "0xff",
+        "payload_int": 255,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x48d112",
+        "parity_hex": "0x112",
+        "payload_hex": "0x1234",
+        "payload_int": 4660,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x1555535",
+        "parity_hex": "0x135",
+        "payload_hex": "0x5555",
+        "payload_int": 21845,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x200042d",
+        "parity_hex": "0x2d",
+        "payload_hex": "0x8001",
+        "payload_int": 32769,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x2aaaa6a",
+        "parity_hex": "0x26a",
+        "payload_hex": "0xaaaa",
+        "payload_int": 43690,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x2af361a",
+        "parity_hex": "0x21a",
+        "payload_hex": "0xabcd",
+        "payload_int": 43981,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3fc016e",
+        "parity_hex": "0x16e",
+        "payload_hex": "0xff00",
+        "payload_int": 65280,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "codeword_hex": "0x3ffff5f",
+        "parity_hex": "0x35f",
+        "payload_hex": "0xffff",
+        "payload_int": 65535,
+        "syndrome": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "generator_module": "vip_bch.vectors",
+    "generator_polynomial_hex": "0x769",
+    "gf_table_checksum_hex": "0x1f0",
+    "profile": "bch31_2byte_t2",
+    "seed": 48151
+  }
+}

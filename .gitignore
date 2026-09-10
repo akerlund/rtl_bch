@@ -1,0 +1,17 @@
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+obj_dir/
+sim_build/
+results.xml
+waves/
+*.fst
+*.vcd
+*.wdb
+
+build/
+*.jou
+*.log
+
+fusesoc.conf
